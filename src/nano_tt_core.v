@@ -18,7 +18,9 @@
 `default_nettype none
 
 module nano_tt_core #(
-    parameter INIT_WAIT = 64
+    // Cold-boot wait before the header read: covers the PSRAM's 150us
+    // power-up time (tPU) at any clk >= 37 MHz (10000 clk = 270us @ 37MHz).
+    parameter INIT_WAIT = 10000
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -66,7 +68,7 @@ module nano_tt_core #(
     wire [7:0] bk_total = m_cur[10:3];   // m/CH blocks
 
     // ---------------- loop counters / pointers ----------------
-    reg [7:0]  boot_cnt;
+    reg [13:0] boot_cnt;
     reg [5:0]  ck;
     reg [7:0]  bk;
     reg [2:0]  gi, c;
@@ -120,7 +122,9 @@ module nano_tt_core #(
                                (yrelu < -48'sd128) ? 8'h80  : yrelu[7:0];
     wire [6:0]         chan_g = {bk[3:0], c};
 
-    reg ack_d;
+    reg ack_s1, ack_s2, ack_d;    // 2-flop sync for the async ACK pin
+    wire ack_rise = ack_s2 && !ack_d;
+    reg magic_ok;
     integer i;
 
     always @(posedge clk or negedge rst_n) begin
@@ -129,7 +133,8 @@ module nano_tt_core #(
             qs_start <= 0; qs_wr <= 0; qs_addr <= 0; qs_len <= 0;
             qs_lat <= 2'd1;
             burst_req <= 0; bph <= 0;
-            tok_valid <= 0; tok_out <= 0; ack_d <= 0;
+            tok_valid <= 0; tok_out <= 0;
+            ack_s1 <= 0; ack_s2 <= 0; ack_d <= 0; magic_ok <= 1;
             cfg_g <= 0; cfg_n1 <= 0; cfg_h <= 0; cfg_v <= 0; cfg_e <= 0;
             cfg_sh1 <= 0; cfg_sh2 <= 0; cfg_sh3 <= 0;
             emb_base <= 0; w1_base <= 0; w2_base <= 0; w3_base <= 0;
@@ -149,7 +154,7 @@ module nano_tt_core #(
             for (i = 0; i < C; i = i + 1) win[i] <= 0;
         end else begin
             qs_start <= 0;
-            ack_d <= ack;
+            ack_s1 <= ack; ack_s2 <= ack_s1; ack_d <= ack_s2;
             xq_r <= xf[kidx];
             acc_c_r <= acc[c];
 
@@ -195,6 +200,11 @@ module nano_tt_core #(
                     if (bcnt >= 6'd44 && bcnt <= 6'd51)
                         win[bcnt - 6'd44] <= rdata[6:0];
                     if (bcnt == 6'd52) qs_lat <= rdata[1:0];
+                    // bytes 53-55: magic "nat" — refuse to run on a
+                    // misread or unprogrammed header
+                    if ((bcnt == 6'd53 && rdata != 8'h6E) ||
+                        (bcnt == 6'd54 && rdata != 8'h61) ||
+                        (bcnt == 6'd55 && rdata != 8'h74)) magic_ok <= 0;
                 end
                 S_GRD, S_XRD: xf[bcnt[3:0]] <= rdata;
                 S_WRD: begin wbyte <= rdata; mac_ph <= 2'd2; end
@@ -218,9 +228,9 @@ module nano_tt_core #(
 
             case (state)
             S_BOOT: begin
-                boot_cnt <= boot_cnt + 8'd1;
-                if (boot_cnt == INIT_WAIT[7:0]) begin
-                    qs_wr <= 0; qs_addr <= 23'd0; qs_len <= 7'd53;
+                boot_cnt <= boot_cnt + 14'd1;
+                if (boot_cnt == INIT_WAIT[13:0]) begin
+                    qs_wr <= 0; qs_addr <= 23'd0; qs_len <= 7'd56;
                     qs_lat <= slow_boot ? 2'd0 : 2'd1;
                     bcnt <= 0; burst_req <= 1;
                     state <= S_HDR;
@@ -228,6 +238,8 @@ module nano_tt_core #(
             end
 
             S_HDR: if (burst_done) begin
+                if (!magic_ok) state <= S_DONE;
+                else begin
                 bm_ptr  <= bm_base;
                 xw_ptr  <= x_base;
                 am_best <= 48'sh800000000000;
@@ -237,6 +249,7 @@ module nano_tt_core #(
                 glen   <= (cfg_e >= K[7:0]) ? K[4:0] : cfg_e[4:0];
                 bcnt <= 0; burst_req <= 1;
                 state <= S_GRD;
+                end
             end
 
             S_GRD: if (burst_done) begin
@@ -420,7 +433,7 @@ module nano_tt_core #(
                 state    <= S_TOKW;
             end
 
-            S_TOKW: if (free_run || (ack && !ack_d)) begin
+            S_TOKW: if (free_run || ack_rise) begin
                 if (!free_run) tok_valid <= 0;
                 if (tok_cnt == cfg_g) begin
                     tok_valid <= 0;

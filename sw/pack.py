@@ -10,7 +10,7 @@ PSRAM image layout (all little-endian, regions 64-byte aligned):
          u16 G, u16 n1(=C*E), u16 H, u16 V, u8 E, u8 sh1, u8 sh2, u8 sh3,
          u32 emb_base, u32 w1_base, u32 w2_base, u32 w3_base, u32 bm_base,
          u32 x_base, u32 h1_base, u32 h2_base, u8 prompt[8],
-         u8 qspi_read_latency, pad to 64
+         u8 qspi_read_latency, u8 magic[3] = "nat", pad to 64
   emb    V rows, stride 32 B (E used, rest zero) -> row addr = base + tok*32
   wN     per block of CH output channels, per chunk of K inputs:
          K*CH nibbles, channel-fastest (nibble seq = w[c0][k],w[c0+1][k],...),
@@ -56,6 +56,10 @@ assert len(isram) == 2 + 5 * G and field(isram[-1], 0, 4) == 7
 assert G >= 1, "G=0 would make the TT core generate 65536 tokens (16-bit wrap)"
 assert n1 == C_ * E_ and C_ == 8 and E_ <= 32
 assert n1 % K == 0 and H % K == 0 and H % CH == 0 and V % CH == 0
+# RTL counter widths: chunk counter is 6-bit (n/16), argmax index is 7-bit
+# with 4-bit block field, token path is 7-bit
+assert n1 <= 1008 and H <= 1008, "chunk counter is 6-bit: n, H <= 1008"
+assert V <= 128, "argmax/token path is 7-bit: V <= 128"
 
 # ---------------- recover tensors ----------------
 # wsram.hex: rows (output channels) of n nibbles, element k at nibble k
@@ -131,6 +135,7 @@ img.extend([E_, sh1, sh2, sh3])
 for v in [emb_base] + w_bases + [bm_base, x_base, h1_base, h2_base]: u32(v)
 img.extend(prompt)
 img.append(args.lat & 3)          # byte 52: QSPI read sample latency
+img.extend(b"nat")                # bytes 53-55: magic checked by the RTL
 img.extend(b"\x00" * (64 - len(img)))
 img = img2
 img[:64] = hdr

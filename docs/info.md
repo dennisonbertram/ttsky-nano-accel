@@ -47,8 +47,12 @@ than a human reads.
    `ui[0]` (ACK) to consume it; VALID drops, then rises with the next token.
    Set `ui[1]` (FREE_RUN) to generate at full speed without handshaking.
 5. After the header-configured number of tokens the design halts with VALID
-   low. Compare the token stream against `test/expected.hex` — it matches the
-   golden integer model bit-for-bit.
+   low; reset to run again (the header is re-read). Compare the token stream
+   against `test/expected.hex` — it matches the golden integer model
+   bit-for-bit. In FREE_RUN mode VALID stays high and TOKEN carries the
+   latest token ("latest token" semantics — slow hosts will skip tokens).
+   If the 3-byte header magic doesn't match (unprogrammed or misread
+   PSRAM), the design halts immediately instead of streaming garbage.
 
 Clocking: 47.6 MHz (21 ns) nominal. Keep clk >= ~37 MHz so QSPI bursts respect the
 PSRAM's 8 us CS-low refresh limit (tCEM). For slow bring-up clocks, assert

@@ -46,6 +46,8 @@ module qspi_ctrl (
                P_DATA = 3'd4, P_END = 3'd5, P_TAIL = 3'd6;
     reg [2:0]  phase;
     reg        lwr;
+    reg [1:0]  llat;      // lat latched at burst start: the core may update
+                          // its lat register mid-burst (header byte 52)
     reg [23:0] laddr;
     reg [7:0]  nib_total;  // data nibbles: 2*len
     reg [7:0]  cnt;        // counts SCK cycles within each phase
@@ -57,8 +59,8 @@ module qspi_ctrl (
         if (!rst_n) begin
             phase <= P_IDLE; busy <= 0; sck <= 0; cs_n <= 1;
             sd_out <= 4'h0; sd_oe <= 4'h0; rvalid <= 0; wnext <= 0;
-            rdata <= 0; lwr <= 0; laddr <= 0; nib_total <= 0; cnt <= 0;
-            cmd_sh <= 0; first_nib <= 0; half <= 0;
+            rdata <= 0; lwr <= 0; llat <= 0; laddr <= 0; nib_total <= 0;
+            cnt <= 0; cmd_sh <= 0; first_nib <= 0; half <= 0;
         end else begin
             rvalid <= 0; wnext <= 0;
 
@@ -66,6 +68,7 @@ module qspi_ctrl (
             P_IDLE: if (start) begin
                 busy      <= 1;
                 lwr       <= wr;
+                llat      <= lat;
                 laddr     <= {1'b0, addr};
                 nib_total <= {len, 1'b0};
                 cs_n      <= 0;
@@ -148,7 +151,7 @@ module qspi_ctrl (
                 // rise from the lat-th onward.
                 if (!sck) begin
                     sck <= 1;
-                    if (cnt >= {6'd0, lat}) begin
+                    if (cnt >= {6'd0, llat}) begin
                         if (!half) begin
                             first_nib <= sd_in; // high nibble arrives first
                             half <= 1;
@@ -161,7 +164,7 @@ module qspi_ctrl (
                 end else begin
                     sck <= 0;
                     cnt <= cnt + 8'd1;
-                    if (cnt == nib_total - 8'd1 + {6'd0, lat}) phase <= P_END;
+                    if (cnt == nib_total - 8'd1 + {6'd0, llat}) phase <= P_END;
                 end
             end
 
