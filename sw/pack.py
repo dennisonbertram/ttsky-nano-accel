@@ -53,6 +53,7 @@ V      = field(head, 32, 16)
 sh1, sh2, sh3 = field(l1, 8, 5), field(l2, 8, 5), field(head, 8, 5)
 G = (len(isram) - 2) // 5
 assert len(isram) == 2 + 5 * G and field(isram[-1], 0, 4) == 7
+assert G >= 1, "G=0 would make the TT core generate 65536 tokens (16-bit wrap)"
 assert n1 == C_ * E_ and C_ == 8 and E_ <= 32
 assert n1 % K == 0 and H % K == 0 and H % CH == 0 and V % CH == 0
 
