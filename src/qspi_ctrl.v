@@ -12,8 +12,9 @@
  * data phase runs 2*len+lat SCK cycles, capturing on every rise after the
  * first `lat` rises.
  * Callers must keep bursts inside one 1 KiB page (APS6404 wraps at pages)
- * and short enough for tCEM (CS low <= 8us): a 64-byte read burst is ~4.5us
- * at 66 MHz clk; below ~37 MHz clk shorten bursts or expect corruption.
+ * and short enough for tCEM (CS low <= 8us): a 64-byte read burst holds CS low
+ * for 299 clk (~4.5us at 66 MHz, 6.3us at 47.6 MHz), so the hard floor is
+ * 37.4 MHz. Below that, shorten bursts or expect corruption.
  *
  * SPDX-License-Identifier: Apache-2.0
  */

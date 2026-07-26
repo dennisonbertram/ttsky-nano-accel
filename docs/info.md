@@ -29,11 +29,12 @@ latency all come from a 64-byte header in the PSRAM image, so one chip can
 run any model that fits in 8 MB (the parent repo's default model is 208 KiB;
 the checked-in test image is a 28 KiB variant).
 
-Measured in simulation: the 28 KiB test model runs 232,159 clocks/token
-(~205 tokens/s at the 47.6 MHz nominal clock); the parent repo's full
-208 KiB model (hidden 512x2) runs 1,520,137 clocks/token (~31 tokens/s).
-Both are bit-exact against the golden integer model, and both are faster
-than a human reads.
+Measured in simulation, steady state at the 47.6 MHz nominal clock: the 28 KiB
+test model runs 232,121 clocks/token (205 tokens/s); the parent repo's full
+208 KiB model (hidden 512x2) runs 1,520,899 clocks/token (31 tokens/s). The
+first token costs an extra 10,271 clocks (216 us) for the power-up wait and
+header read, one time after reset. Both models are bit-exact against the
+golden integer model, and both are faster than a human reads.
 
 ## How to test
 
@@ -54,10 +55,17 @@ than a human reads.
    If the 3-byte header magic doesn't match (unprogrammed or misread
    PSRAM), the design halts immediately instead of streaming garbage.
 
-Clocking: 47.6 MHz (21 ns) nominal. Keep clk >= ~37 MHz so QSPI bursts respect the
-PSRAM's 8 us CS-low refresh limit (tCEM). For slow bring-up clocks, assert
-`ui[2]` (SLOW_BOOT) so the header read samples with latency 0, and set header
-byte 52 to 0 in the image; at speed, leave `ui[2]` low and header latency 1.
+Clocking: 47.6 MHz (21 ns) nominal. The longest burst (a 64-byte weight read)
+holds CS low for 299 clocks, measured in simulation, against the PSRAM's 8 us
+CS-low refresh limit (tCEM). That puts the hard floor at 37.4 MHz — **run at
+40 MHz or above** for margin. At the nominal 47.6 MHz a burst is 6.3 us, 21%
+inside the limit.
+
+For slow bring-up clocks, assert `ui[2]` (SLOW_BOOT) so the header read samples
+with latency 0, and set header byte 52 to 0 in the image; at speed, leave
+`ui[2]` low and header latency 1. SLOW_BOOT only changes read sampling — it
+does not lift the tCEM floor, so clocking well below 37.4 MHz risks PSRAM data
+loss no matter how the sampling is configured.
 
 ## External hardware
 

@@ -16,7 +16,7 @@
   "PL_TARGET_DENSITY_PCT": 60,
 
   "//": "CLOCK_PERIOD - Increase this in case you are getting setup time violations.",
-  "//": "The value is in nanoseconds: 21ns == 47.6MHz (QSPI PSRAM streaming needs >= ~37MHz).",
+  "//": "The value is in nanoseconds: 21ns == 47.6MHz (QSPI PSRAM streaming needs >= 40MHz).",
   "//": "20ns left max_ss_100C_1v60 setup 0.09ns short; typical corner has ~10ns of slack.",
   "CLOCK_PERIOD": 21,
 

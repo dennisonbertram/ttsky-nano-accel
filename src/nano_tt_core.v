@@ -19,7 +19,8 @@
 
 module nano_tt_core #(
     // Cold-boot wait before the header read: covers the PSRAM's 150us
-    // power-up time (tPU) at any clk >= 37 MHz (10000 clk = 270us @ 37MHz).
+    // power-up time (tPU) at any clk in range (10000 clk = 250us @ 40MHz,
+    // the tCEM-imposed floor; 210us at the 47.6MHz nominal).
     parameter INIT_WAIT = 10000
 ) (
     input  wire        clk,
